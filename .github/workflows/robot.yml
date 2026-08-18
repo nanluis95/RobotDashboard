@@ -33,7 +33,6 @@ jobs:
       - name: Instalar Chromium
         run: |
           playwright install chromium
-          playwright install-deps chromium
 
       - name: Ejecutar robot
         env:
