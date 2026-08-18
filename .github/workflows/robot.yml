@@ -11,13 +11,27 @@ jobs:
 
     steps:
 
+      # ============================================================
+      # DESCARGAR CÓDIGO
+      # ============================================================
+
       - name: Descargar código
         uses: actions/checkout@v4
+
+
+      # ============================================================
+      # INSTALAR PYTHON
+      # ============================================================
 
       - name: Instalar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+
+      # ============================================================
+      # INSTALAR DEPENDENCIAS
+      # ============================================================
 
       - name: Instalar dependencias
         run: |
@@ -27,10 +41,19 @@ jobs:
           pip install openpyxl
           pip install playwright
 
+
+      # ============================================================
+      # INSTALAR CHROMIUM PARA PLAYWRIGHT
+      # ============================================================
+
       - name: Instalar Chromium
         run: |
-          playwright install chromium
-          playwright install-deps chromium
+          playwright install --only-shell chromium
+
+
+      # ============================================================
+      # EJECUTAR ROBOT
+      # ============================================================
 
       - name: Ejecutar robot
         env:
