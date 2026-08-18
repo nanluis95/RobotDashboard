@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
 
   schedule:
-    - cron: "45 * * * *"
+    - cron: "55 * * * *"
+      timezone: "America/El_Salvador"
 
 jobs:
 
