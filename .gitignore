@@ -1,0 +1,7 @@
+venv/
+Descargas/
+Logs/
+__pycache__/
+*.pyc
+*.xlsx
+*.xls
