@@ -1,4 +1,5 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import base64
 import requests
 
@@ -152,7 +153,18 @@ def exportar_reporte(page):
 
         download = download_info.value
 
-        nombre = datetime.now().strftime("%d%m %H%M") + ".xlsx"
+        # =====================================================
+        # HORA DE EL SALVADOR
+        # =====================================================
+
+        ahora_el_salvador = datetime.now(
+            ZoneInfo("America/El_Salvador")
+        )
+
+        nombre = (
+            ahora_el_salvador.strftime("%d%m %H%M")
+            + ".xlsx"
+        )
 
         destino = CARPETA_DESCARGAS / nombre
 
