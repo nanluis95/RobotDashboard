@@ -3,6 +3,10 @@ name: Robot Dashboard
 on:
   workflow_dispatch:
 
+  push:
+    branches:
+      - main
+
   schedule:
     - cron: "*/10 * * * *"
       timezone: "America/El_Salvador"
