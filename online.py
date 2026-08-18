@@ -1,11 +1,14 @@
 from datetime import datetime
 import base64
 import requests
-URL_API = "https://script.google.com/macros/s/AKfycbzZbj4K1CPhsLSsgVIULMc_t_0A-tC_lDCWgMyz-S8sTHJzGdvW3r6Uos5NoGk66ZOP/exec"
 
 from playwright.sync_api import TimeoutError
 
 from config import CARPETA_DESCARGAS
+
+
+URL_API = "https://script.google.com/macros/s/AKfycbzZbj4K1CPhsLSsgVIULMc_t_0A-tC_lDCWgMyz-S8sTHJzGdvW3r6Uos5NoGk66ZOP/exec"
+
 
 def subir_excel_a_drive(ruta_archivo):
 
@@ -19,7 +22,6 @@ def subir_excel_a_drive(ruta_archivo):
 
     # Leer archivo Excel
     with open(ruta_archivo, "rb") as archivo:
-
         contenido = archivo.read()
 
     # Convertir a Base64
@@ -31,25 +33,17 @@ def subir_excel_a_drive(ruta_archivo):
     nombre_archivo = ruta_archivo.split("/")[-1]
 
     datos = {
-
         "tipo": "excel",
-
         "nombre": nombre_archivo,
-
         "archivo": archivo_base64
-
     }
 
     print("Enviando archivo a Google Drive...")
 
     respuesta = requests.post(
-
         URL_API,
-
         json=datos,
-
         timeout=180
-
     )
 
     print(
@@ -93,6 +87,7 @@ def subir_excel_a_drive(ruta_archivo):
 
     return resultado
 
+
 def abrir_reporte_online(page):
 
     print("====================================")
@@ -114,8 +109,8 @@ def abrir_reporte_online(page):
     print("Abriendo Online Puertos...")
 
     page.get_by_text(
-    "Online puertos",
-    exact=True
+        "Online puertos",
+        exact=True
     ).first.click()
 
     page.wait_for_timeout(2000)
@@ -165,26 +160,34 @@ def exportar_reporte(page):
 
         download.save_as(destino)
 
-print("Archivo guardado correctamente.")
+        print("Archivo guardado correctamente.")
 
-# =====================================================
-# GUARDAR COPIA DEL EXCEL ORIGINAL EN GOOGLE DRIVE
-# =====================================================
+        # =====================================================
+        # GUARDAR COPIA DEL EXCEL ORIGINAL EN GOOGLE DRIVE
+        # =====================================================
 
-subir_excel_a_drive(destino)
+        subir_excel_a_drive(destino)
 
-        # Intentar cerrar la ventana de confirmación
+        # =====================================================
+        # CERRAR VENTANA DE CONFIRMACIÓN
+        # =====================================================
+
         try:
 
             print("Cerrando ventana de confirmación...")
 
-            page.locator("#eui_icon_10008 #rectangle").click(timeout=3000)
+            page.locator(
+                "#eui_icon_10008 #rectangle"
+            ).click(timeout=3000)
 
             page.wait_for_timeout(1000)
 
         except Exception as e:
 
-            print("No fue posible cerrar la ventana:", e)
+            print(
+                "No fue posible cerrar la ventana:",
+                e
+            )
 
         return destino
 
