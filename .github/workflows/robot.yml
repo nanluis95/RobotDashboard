@@ -1,0 +1,40 @@
+name: Robot Dashboard
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  ejecutar-robot:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas
+          pip install requests
+          pip install openpyxl
+          pip install playwright
+
+      - name: Instalar Chromium
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Ejecutar robot
+        env:
+          IMASTER_USUARIO: ${{ secrets.IMASTER_USUARIO }}
+          IMaster_CONTRASENA: ${{ secrets.IMASTER_CONTRASENA }}
+        run: |
+          python main.py
