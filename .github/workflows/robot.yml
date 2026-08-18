@@ -35,6 +35,6 @@ jobs:
       - name: Ejecutar robot
         env:
           IMASTER_USUARIO: ${{ secrets.IMASTER_USUARIO }}
-          IMaster_CONTRASENA: ${{ secrets.IMASTER_CONTRASENA }}
+          IMASTER_CONTRASENA: ${{ secrets.IMASTER_CONTRASENA }}
         run: |
           python main.py
