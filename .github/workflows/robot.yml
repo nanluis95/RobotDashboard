@@ -9,7 +9,6 @@ on:
 
   schedule:
     - cron: "*/5 * * * *"
-      timezone: "America/El_Salvador"
 
 jobs:
 
@@ -19,20 +18,35 @@ jobs:
 
     steps:
 
+      # ==========================================
+      # DESCARGAR CÓDIGO
+      # ==========================================
       - name: Descargar código
         uses: actions/checkout@v4
 
+
+      # ==========================================
+      # PYTHON
+      # ==========================================
       - name: Instalar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
+
+      # ==========================================
+      # INSTALAR DEPENDENCIAS
+      # ==========================================
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install pandas openpyxl playwright requests
 
+
+      # ==========================================
+      # CACHE DE PLAYWRIGHT
+      # ==========================================
       - name: Restaurar caché de Playwright
         uses: actions/cache@v4
         with:
@@ -41,10 +55,18 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+
+      # ==========================================
+      # INSTALAR CHROMIUM
+      # ==========================================
       - name: Instalar Chromium
         run: |
           playwright install chromium
 
+
+      # ==========================================
+      # EJECUTAR ROBOT
+      # ==========================================
       - name: Ejecutar robot
         env:
           IMASTER_USUARIO: ${{ secrets.IMASTER_USUARIO }}
