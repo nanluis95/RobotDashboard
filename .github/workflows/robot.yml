@@ -8,7 +8,7 @@ on:
       - main
 
   schedule:
-    - cron: "2-59/6 * * * *"
+    - cron: "*/5 * * * *"
 
 jobs:
 
