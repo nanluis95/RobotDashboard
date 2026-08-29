@@ -8,8 +8,8 @@ on:
       - main
 
   schedule:
-    - cron: "7,37 * * * *"
-      timezone: "America/El_Salvador"
+  - cron: "*/5 * * * *"
+    timezone: "America/El_Salvador"
 
 jobs:
 
