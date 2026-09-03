@@ -3,14 +3,6 @@ name: Panel de control del robot
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - principal
-
-  schedule:
-    - cron: "*/5 * * * *"
-      timezone: "America/El_Salvador"
-
 jobs:
 
   ejecutar-robot:
