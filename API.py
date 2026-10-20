@@ -416,19 +416,18 @@ def consultar_interfaces(session, id_router, csrf_token):
 # ENVIAR INFORMACIÓN A GOOGLE SHEETS
 # ============================================================
 
+
 def enviar_a_google_sheets(
     identificador,
     device_ip,
     interfaces,
     vpn,
-    api_key
+    api_key,
+    estado,
+    observacion
 ):
-
     if not api_key:
-
-        raise Exception(
-            "No está configurada SHEETS_API_KEY."
-        )
+        raise Exception("No está configurada SHEETS_API_KEY.")
 
     parametros = {
         "apiKey": api_key,
@@ -436,6 +435,8 @@ def enviar_a_google_sheets(
         "deviceIp": device_ip,
         "vpn": vpn,
         "interfaces": interfaces,
+        "estado": estado,
+        "observacion": observacion
     }
 
     respuesta = requests.post(
@@ -451,28 +452,26 @@ def enviar_a_google_sheets(
     respuesta.raise_for_status()
 
     try:
-
         resultado = respuesta.json()
-
     except ValueError:
-
         raise Exception(
             "Google Sheets no devolvió una respuesta JSON válida: "
             + respuesta.text[:500]
         )
 
     if not resultado.get("ok"):
-
         raise Exception(
             "Google Sheets rechazó la actualización: "
             + str(resultado)
         )
 
     print(
-        f"Información enviada correctamente para {identificador}."
+        f"Información enviada correctamente para {identificador}: "
+        f"{estado} - {observacion}"
     )
 
     return True
+
 
 
 # ============================================================
@@ -531,51 +530,112 @@ def obtener_site_ids():
 # PROCESAR UN SITE ID
 # ============================================================
 
+
 def procesar_site(session, csrf_token, identificador):
 
     print(f"\nProcesando SITE ID: {identificador}")
 
+    device_ip = ""
+    interfaces = {}
+    vpn = ""
+
+    # 1. Buscar router en iMaster
     try:
-
-        # 1. Buscar router en iMaster
-
         id_router, device_ip = consultar_router(
             session,
             identificador,
             csrf_token
         )
 
-        # 2. Consultar interfaces y VPN
+    except Exception as error:
 
+        observacion = str(error)
+
+        if "No se encontró el router" in observacion:
+            observacion = "No registrado en iMaster"
+        else:
+            observacion = f"Error al buscar router: {observacion}"
+
+        print(f"SITE ID OFFLINE: {identificador} - {observacion}")
+
+        try:
+            enviar_a_google_sheets(
+                identificador,
+                "",
+                {},
+                "",
+                API_KEY,
+                "OFFLINE",
+                observacion
+            )
+            return True
+
+        except Exception as error_sheets:
+            print(
+                f"ERROR enviando resultado OFFLINE de {identificador}: "
+                f"{error_sheets}"
+            )
+            return False
+
+    # 2. Consultar interfaces y VPN
+    try:
         interfaces, vpn = consultar_interfaces(
             session,
             id_router,
             csrf_token
         )
 
-        # 3. Enviar información a Google Sheets
+        if not interfaces:
+            raise Exception("No se encontraron interfaces objetivo.")
 
+    except Exception as error:
+
+        print(
+            f"Error consultando interfaces de {identificador}: {error}"
+        )
+
+        observacion = f"Error al consultar interfaces: {error}"
+
+        try:
+            enviar_a_google_sheets(
+                identificador,
+                "",
+                {},
+                "",
+                API_KEY,
+                "OFFLINE",
+                observacion
+            )
+            return True
+
+        except Exception as error_sheets:
+            print(
+                f"ERROR enviando resultado OFFLINE de {identificador}: "
+                f"{error_sheets}"
+            )
+            return False
+
+    # 3. Si se obtuvieron interfaces, registrar ONLINE
+    try:
         enviar_a_google_sheets(
             identificador,
             device_ip,
             interfaces,
             vpn,
-            API_KEY
+            API_KEY,
+            "ONLINE",
+            "Validación exitosa"
         )
 
-        print(
-            f"RESULTADO EXITOSO: {identificador}"
-        )
-
+        print(f"RESULTADO ONLINE: {identificador}")
         return True
 
     except Exception as error:
-
         print(
-            f"ERROR procesando {identificador}: {error}"
+            f"ERROR enviando resultado ONLINE de {identificador}: {error}"
         )
-
         return False
+
 
 
 # ============================================================
