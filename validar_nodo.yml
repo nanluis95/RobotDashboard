@@ -1,0 +1,40 @@
+
+name: Validar Nodo iMaster
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_ids_json:
+        description: "Lista JSON de SITE ID del nodo seleccionado"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validar-nodo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests cryptography
+
+      - name: Ejecutar validación del nodo
+        env:
+          SITE_IDS_JSON: ${{ inputs.site_ids_json }}
+          IMASTER_USER: ${{ secrets.IMASTER_USER }}
+          IMASTER_PASSWORD: ${{ secrets.IMASTER_PASSWORD }}
+          SHEETS_API_KEY: ${{ secrets.SHEETS_API_KEY }}
+        run: python validar_nodo.py
