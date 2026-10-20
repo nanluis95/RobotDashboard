@@ -1,96 +1,128 @@
-import os
-import json
-import time
-import base64
-import requests
+    print('Token CSRF obtenido correctamente.')
+    return csrf_token
 
-from urllib.parse import quote
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-
-
-# ============================================================
-# CONFIGURACION
-# ============================================================
-
-BASE_URL = "https://nce.nb.movistar.com.sv"
-
-URL_GOOGLE_SHEETS = (
-    "https://script.google.com/macros/s/"
-    "AKfycbyIY5PdHTHa7eUidjHWfvbYlCmu9oI2FSPveSuYuCTEQaExo3cheT57-FD52TDSXIku7g/exec"
-)
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 Chrome/154.0.0.0 Safari/537.36"
-)
-
-USUARIO = os.getenv("IMASTER_USER", "MON_MOV")
-CONTRASENA = os.getenv("IMASTER_PASSWORD", "")
-API_KEY = os.getenv("SHEETS_API_KEY", "")
-
-INTERFACES_OBJETIVO = {
-    "GigabitEthernet0/0/4": "GigabitEthernet0_0_4",
-    "GigabitEthernet0/0/8": "GigabitEthernet0_0_8",
-    "XGigabitEthernet0/0/8": "XGigabitEthernet0_0_8",
-    "XGigabitEthernet0/0/9": "XGigabitEthernet0_0_9"
-}
-
-ESTADOS = {
-    1: "UP", 2: "DOWN", 3: "TEST",
-    "1": "UP", "2": "DOWN", "3": "TEST"
-}
-
-
-# ============================================================
-# FUNCIONES DE AUTENTICACION (probar_login.py)
-# ============================================================
-
-def obtener_clave(session):
-    respuesta = session.get(f"{BASE_URL}/unisso/pubkey", timeout=30)
+def consultar_router(session, identificador, csrf_token):
+    print('\n3. CONSULTANDO ROUTER:', identificador)
+    url = f'{BASE_URL}/controller/campus/v2/devices/list?sortField=status&pageIndex=1&pageSize=5'
+    payload = {'keyWord': identificador, 'status': [0, 1, 2, 3], 'deviceGrpTypeList': ['AC', 'AP', 'AR', 'FW', 'LSW'], 'deviceRoles': [], 'managementMode': [0], 'screenNo': 'device', 'searchFields': ['name'], 'tenantIdList': [], 'tenantType': 'none'}
+    headers = {'Accept': 'application/json, text/plain, */*', 'Content-Type': 'application/json', 'Origin': BASE_URL, 'Referer': BASE_URL + '/', 'User-Agent': USER_AGENT, 'Accept-Language': 'es-ES', 'X-Requested-With': 'XMLHttpRequest', 'http_x_requested_with': 'XMLHttpRequest', 'x-uni-crsf-token': csrf_token, 'roarand': csrf_token, 'x-non-renewal-session': 'true'}
+    respuesta = session.post(url, json=payload, headers=headers, timeout=45)
+    print('HTTP de consulta:', respuesta.status_code)
     respuesta.raise_for_status()
     datos = respuesta.json()
+    if not datos.get('data'):
+        raise Exception('No se encontró el router: ' + identificador)
+    router = next((item for item in datos['data'] if str(item.get('name', '')).strip().upper() == identificador.upper()), None)
+    if router is None:
+        raise Exception('iMaster no devolvió una coincidencia exacta para: ' + identificador)
+    id_router = router.get('id')
+    if not id_router:
+        raise Exception('No se encontró el identificador interno del router.')
+    device_ip = router.get('deviceIp') or ''
+    print('Router encontrado:', router.get('name'))
+    print('IP del dispositivo:', device_ip)
+    return (id_router, device_ip)
 
-    if not datos.get("enableEncrypt"):
-        raise Exception("El cifrado de iMaster no está habilitado.")
+def consultar_interfaces(session, id_router, csrf_token):
+    print('\n4. CONSULTANDO INTERFACES...')
+    url = f'{BASE_URL}/controller/campus/v2/deviceDiagnose/{id_router}/port'
+    headers = {'Accept': 'application/json', 'Referer': BASE_URL + '/', 'User-Agent': USER_AGENT, 'X-Requested-With': 'XMLHttpRequest', 'http_x_requested_with': 'XMLHttpRequest', 'x-uni-crsf-token': csrf_token, 'roarand': csrf_token}
+    respuesta = session.get(url, headers=headers, timeout=45)
+    print('HTTP consulta de puertos:', respuesta.status_code)
+    respuesta.raise_for_status()
+    datos = respuesta.json()
+    lista_interfaces = datos.get('data', [])
+    if not isinstance(lista_interfaces, list):
+        raise Exception('La respuesta de interfaces no tiene el formato esperado.')
+    resultados = {}
+    interfaz_underlay = None
+    for nombre, clave in INTERFACES_OBJETIVO.items():
+        interfaz = next((item for item in lista_interfaces if item.get('name') == nombre), None)
+        if interfaz is None:
+            estado = 'SIN DATOS'
+            ip = ''
+            vpn = ''
+        else:
+            codigo_estado = interfaz.get('runStatus')
+            estado = ESTADOS.get(codigo_estado, 'DESCONOCIDO')
+            ip = interfaz.get('ipAddr') or ''
+            vpn = interfaz.get('vpnInstanceName') or ''
+            if vpn == 'underlay_1':
+                interfaz_underlay = interfaz
+        resultados[clave] = estado
+        print(nombre, ':', estado)
+    vpn_general = ''
+    if interfaz_underlay:
+        vpn_general = interfaz_underlay.get('vpnInstanceName') or ''
+    print('VPN general:', vpn_general or 'SIN VPN')
+    return (resultados, vpn_general)
 
-    clave = serialization.load_pem_public_key(
-        datos["pubKey"].encode("utf-8")
-    )
-    return clave, datos["version"], datos["timeStamp"]
+def enviar_a_google_sheets(identificador, device_ip, interfaces, vpn, api_key):
+    print('\n5. ENVIANDO INFORMACION A GOOGLE SHEETS...')
+    datos = {'apiKey': api_key, 'identificador': identificador, 'deviceIp': device_ip, 'vpn': vpn, 'interfaces': interfaces}
+    respuesta = requests.post(URL_GOOGLE_SHEETS, json=datos, timeout=45)
+    respuesta.raise_for_status()
+    resultado = respuesta.json()
+    print('\nRESPUESTA DE GOOGLE SHEETS:')
+    print(resultado)
+    if not resultado.get('ok'):
+        raise Exception('Google Sheets rechazó la actualización: ' + str(resultado.get('mensaje')))
+    print('\nACTUALIZACION COMPLETADA CORRECTAMENTE.')
+
+def obtener_site_ids():
+    valor = os.getenv("SITE_IDS_JSON", "").strip()
+    if not valor:
+        raise Exception("No se recibió SITE_IDS_JSON desde GitHub Actions.")
+    try:
+        ids = json.loads(valor)
+    except json.JSONDecodeError as error:
+        raise Exception(f"SITE_IDS_JSON no contiene JSON válido: {error}")
+    if not isinstance(ids, list) or not ids:
+        raise Exception("SITE_IDS_JSON debe ser una lista no vacía.")
+
+    normalizados = []
+    for item in ids:
+        site_id = str(item).strip()
+        if site_id and site_id not in normalizados:
+            normalizados.append(site_id)
+    if not normalizados:
+        raise Exception("No hay SITE ID válidos para procesar.")
+    return normalizados
 
 
-def cifrar_contrasena(contrasena, clave, version):
-    texto = quote(contrasena, safe="-_.!~*'()")
-    bloques = [texto[i:i + 270] for i in range(0, len(texto), 270)]
-    cifrados = []
-
-    for bloque in bloques:
-        cifrado = clave.encrypt(
-            bloque.encode("utf-8"),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA384()),
-                algorithm=hashes.SHA384(),
-                label=None
-            )
-        )
-        cifrados.append(base64.b64encode(cifrado).decode("ascii"))
-
-    return "00000001".join(cifrados) + version
+def procesar_site(session, csrf_token, identificador):
+    print("\\n" + "=" * 60)
+    print("PROCESANDO SITE ID:", identificador)
+    print("=" * 60)
+    id_router, device_ip = consultar_router(session, identificador, csrf_token)
+    interfaces, vpn = consultar_interfaces(session, id_router, csrf_token)
+    enviar_a_google_sheets(identificador, device_ip, interfaces, vpn, API_KEY)
 
 
-def iniciar_sesion_automatica(session):
-    print("\n1. AUTENTICANDO EN iMASTER...")
+def main():
+    if not API_KEY:
+        raise Exception("Falta el secreto SHEETS_API_KEY.")
+    site_ids = obtener_site_ids()
+    print("SITE ID recibidos:", len(site_ids))
+    print("Usuario iMaster:", USUARIO)
 
-    if not USUARIO or not CONTRASENA:
-        raise Exception(
-            "Faltan las credenciales IMASTER_USER o IMASTER_PASSWORD."
-        )
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    try:
+        ruta = iniciar_sesion(session)
+        csrf_token = preparar_sesion_portal(session, ruta)
+        exitosos, fallidos = [], []
 
-    clave, version, timestamp = obtener_clave(session)
-    password_cifrada = cifrar_contrasena(CONTRASENA, clave, version)
+        for identificador in site_ids:
+            try:
+                procesar_site(session, csrf_token, identificador)
+                exitosos.append(identificador)
+            except Exception as error:
+                print(f"ERROR procesando {identificador}: {error}")
+                fallidos.append({"site_id": identificador, "error": str(error)})
 
-    nonce = "".join(format(byte, "x") for byte in os.urandom(16))
-
-    parametros = {
-        "decision": "1",
+        print("\\nRESUMEN DE VALIDACIÓN")
+        print("Correctos:", len(exitosos), exitosos)
+        print("Fallidos:", len(fallidos), fallidos)
+        if fallidos:
+            raise Exception(f"Proceso finalizado con {len(fallidos)} SITE ID fallidos.")
