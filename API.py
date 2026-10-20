@@ -45,9 +45,6 @@ ESTADOS = {
 }
 
 
-# ============================================================
-# OBTENER CLAVE PÚBLICA DE IMASTER
-# ============================================================
 
 def obtener_clave(session):
 
@@ -55,12 +52,31 @@ def obtener_clave(session):
 
     respuesta = session.get(
         url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        },
         timeout=30
     )
 
+    print("\n--- DIAGNÓSTICO DE CLAVE PÚBLICA ---")
+    print("Código HTTP:", respuesta.status_code)
+    print("Content-Type:", respuesta.headers.get("Content-Type"))
+    print("URL final:", respuesta.url)
+    print("Respuesta:", respuesta.text[:500])
+    print("-----------------------------------")
+
     respuesta.raise_for_status()
 
-    datos = respuesta.json()
+    try:
+        datos = respuesta.json()
+
+    except ValueError:
+
+        raise Exception(
+            "iMaster no devolvió JSON al solicitar la clave pública. "
+            "Revisar el diagnóstico anterior."
+        )
 
     clave_publica = (
         datos.get("data", {}).get("publicKey")
@@ -68,11 +84,13 @@ def obtener_clave(session):
     )
 
     if not clave_publica:
+
         raise Exception(
-            "No se pudo obtener la clave pública de iMaster."
+            "No se encontró publicKey en la respuesta de iMaster."
         )
 
     return clave_publica
+
 
 
 # ============================================================
