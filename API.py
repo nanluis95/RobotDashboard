@@ -57,9 +57,9 @@ def iniciar_sesion(session):
         raise Exception("No está configurado IMASTER_PASSWORD.")
 
     login_url = (
-        "https://nce.nb.movistar.com.sv/"
-        "unisso/login.action?decision=1&service=%2Funisess%2Fauth%3Fservice%3D%252F"
-    )
+    "https://nce.nb.movistar.com.sv/"
+    "unisso/login.action?decision=1&service=%2Funisess%2Fv1%2Fauth%3Fservice%3D%252F"
+)
 
     playwright = None
     browser = None
