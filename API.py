@@ -231,9 +231,18 @@ def consultar_router(session, identificador, csrf_token):
         timeout=30
     )
 
+    if respuesta.status_code != 200:
+
+    print("===== DIAGNÓSTICO DE CONSULTA =====")
+    print("Código HTTP:", respuesta.status_code)
+    print("Content-Type:", respuesta.headers.get("Content-Type"))
+    print("Respuesta de iMaster:")
+    print(respuesta.text[:1500])
+    print("===== FIN DEL DIAGNÓSTICO =====")
+
     respuesta.raise_for_status()
 
-    datos = respuesta.json()
+datos = respuesta.json()
 
     registros = (
         datos.get("data", {}).get("list")
