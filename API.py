@@ -307,6 +307,7 @@ def consultar_router(session, identificador, csrf_token):
 # CONSULTAR INTERFACES Y VPN DEL ROUTER
 # ============================================================
 
+
 def consultar_interfaces(session, id_router, csrf_token):
 
     url = (
@@ -318,6 +319,8 @@ def consultar_interfaces(session, id_router, csrf_token):
         "User-Agent": USER_AGENT,
         "Accept": "application/json",
         "X-CSRF-TOKEN": csrf_token,
+        "x-uni-crsf-token": csrf_token,
+        "X-Requested-With": "XMLHttpRequest"
     }
 
     respuesta = session.get(
@@ -330,24 +333,31 @@ def consultar_interfaces(session, id_router, csrf_token):
 
     datos = respuesta.json()
 
-    registros = (
-        datos.get("data", {}).get("list")
-        or datos.get("data", {}).get("ports")
-        or datos.get("data")
-        or []
-    )
+    # Identificar la estructura recibida
+    contenido = datos.get("data", [])
 
-    if isinstance(registros, dict):
+    if isinstance(contenido, list):
+        registros = contenido
 
+    elif isinstance(contenido, dict):
         registros = (
-            registros.get("list")
-            or registros.get("ports")
+            contenido.get("list")
+            or contenido.get("ports")
             or []
         )
+
+    else:
+        registros = []
+
+    if not isinstance(registros, list):
+        registros = []
 
     interfaces = {}
 
     for puerto in registros:
+
+        if not isinstance(puerto, dict):
+            continue
 
         nombre = (
             puerto.get("name")
@@ -373,28 +383,33 @@ def consultar_interfaces(session, id_router, csrf_token):
             "DESCONOCIDO"
         )
 
+    # Obtener VPN únicamente si viene dentro de un diccionario
     vpn = ""
 
-    datos_vpn = datos.get("data", {}).get("vpn")
+    if isinstance(contenido, dict):
 
-    if isinstance(datos_vpn, dict):
+        datos_vpn = contenido.get("vpn")
 
-        vpn = datos_vpn.get("underlay_1", "")
+        if isinstance(datos_vpn, dict):
 
-    elif isinstance(datos_vpn, list):
+            vpn = datos_vpn.get("underlay_1", "")
 
-        for elemento in datos_vpn:
+        elif isinstance(datos_vpn, list):
 
-            if elemento.get("name") == "underlay_1":
+            for elemento in datos_vpn:
 
-                vpn = elemento.get("value", "")
-                break
+                if not isinstance(elemento, dict):
+                    continue
 
-    print(
-        f"Interfaces consultadas: {len(interfaces)}"
-    )
+                if elemento.get("name") == "underlay_1":
+                    vpn = elemento.get("value", "")
+                    break
+
+    print(f"Interfaces consultadas: {len(interfaces)}")
+    print(f"VPN obtenida: {vpn or 'No disponible'}")
 
     return interfaces, vpn
+
 
 
 # ============================================================
