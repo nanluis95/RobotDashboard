@@ -1,127 +1,96 @@
-            continue
+import os
+import json
+import time
+import base64
+import requests
 
-        if site_id:
-            resultado.append({"siteId": site_id, "codigo": codigo})
-
-    if not resultado:
-        raise Exception("No se encontraron SITE ID válidos.")
-
-    # Eliminar duplicados sin alterar el orden recibido.
-    unicos = {}
-    for site in resultado:
-        clave = site["siteId"].upper()
-        if clave not in unicos:
-            unicos[clave] = site
-
-    return list(unicos.values())
+from urllib.parse import quote
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 
 # ============================================================
-# PROCESAR UN SITE ID
+# CONFIGURACION
 # ============================================================
 
-def procesar_site(session, csrf_token, site):
-    site_id = site["siteId"]
-    codigo = site["codigo"]
+BASE_URL = "https://nce.nb.movistar.com.sv"
 
-    print("\nCONSULTANDO SITE ID:", site_id)
+URL_GOOGLE_SHEETS = (
+    "https://script.google.com/macros/s/"
+    "AKfycbyIY5PdHTHa7eUidjHWfvbYlCmu9oI2FSPveSuYuCTEQaExo3cheT57-FD52TDSXIku7g/exec"
+)
 
-    id_router, device_ip = consultar_router(
-        session, site_id, csrf_token
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 Chrome/154.0.0.0 Safari/537.36"
+)
+
+USUARIO = os.getenv("IMASTER_USER", "MON_MOV")
+CONTRASENA = os.getenv("IMASTER_PASSWORD", "")
+API_KEY = os.getenv("SHEETS_API_KEY", "")
+
+INTERFACES_OBJETIVO = {
+    "GigabitEthernet0/0/4": "GigabitEthernet0_0_4",
+    "GigabitEthernet0/0/8": "GigabitEthernet0_0_8",
+    "XGigabitEthernet0/0/8": "XGigabitEthernet0_0_8",
+    "XGigabitEthernet0/0/9": "XGigabitEthernet0_0_9"
+}
+
+ESTADOS = {
+    1: "UP", 2: "DOWN", 3: "TEST",
+    "1": "UP", "2": "DOWN", "3": "TEST"
+}
+
+
+# ============================================================
+# FUNCIONES DE AUTENTICACION (probar_login.py)
+# ============================================================
+
+def obtener_clave(session):
+    respuesta = session.get(f"{BASE_URL}/unisso/pubkey", timeout=30)
+    respuesta.raise_for_status()
+    datos = respuesta.json()
+
+    if not datos.get("enableEncrypt"):
+        raise Exception("El cifrado de iMaster no está habilitado.")
+
+    clave = serialization.load_pem_public_key(
+        datos["pubKey"].encode("utf-8")
     )
-
-    interfaces, vpn_general, filas_up = (
-        consultar_interfaces_detalladas(
-            session, id_router, csrf_token
-        )
-    )
-
-    # Actualiza en Sheets los estados de las cuatro interfaces.
-    enviar_a_google_sheets(
-        site_id, device_ip, interfaces, vpn_general, API_KEY
-    )
-
-    # Devuelve una fila por cada interfaz UP.
-    if filas_up:
-        return [
-            {
-                "siteId": site_id,
-                "codigo": codigo,
-                "interfaz": interfaz["interfaz"],
-                "estado": interfaz["estado"],
-                "ip": interfaz["ip"] or device_ip,
-                "vpn": interfaz["vpn"] or vpn_general
-            }
-            for interfaz in filas_up
-        ]
-
-    return [{
-        "siteId": site_id,
-        "codigo": codigo,
-        "interfaz": "SIN INTERFAZ UP",
-        "estado": "SIN INTERFAZ UP",
-        "ip": device_ip,
-        "vpn": vpn_general
-    }]
+    return clave, datos["version"], datos["timeStamp"]
 
 
-# ============================================================
-# EJECUCION PRINCIPAL
-# ============================================================
+def cifrar_contrasena(contrasena, clave, version):
+    texto = quote(contrasena, safe="-_.!~*'()")
+    bloques = [texto[i:i + 270] for i in range(0, len(texto), 270)]
+    cifrados = []
 
-def main():
-    if not API_KEY:
-        raise Exception("Falta SHEETS_API_KEY.")
-
-    sites = obtener_sites_recibidos()
-    session = requests.Session()
-    resultados = []
-    fallidos = []
-
-    try:
-        print("=" * 55)
-        print("VALIDACION DE NODO - iMASTER")
-        print("=" * 55)
-        print("SITE ID recibidos:", len(sites))
-
-        ruta = iniciar_sesion_automatica(session)
-        csrf_token = preparar_sesion_portal(session, ruta)
-
-        for numero, site in enumerate(sites, start=1):
-            print("\nPROGRESO:", numero, "DE", len(sites))
-
-            try:
-                filas = procesar_site(session, csrf_token, site)
-                resultados.extend(filas)
-            except Exception as error:
-                fallidos.append({
-                    "siteId": site["siteId"],
-                    "error": str(error)
-                })
-                print(
-                    "ERROR EN SITE ID:",
-                    site["siteId"],
-                    str(error)
-                )
-
-            time.sleep(1)
-
-        salida = {
-            "ok": len(fallidos) == 0,
-            "totalSites": len(sites),
-            "sitesFallidos": len(fallidos),
-            "resultados": resultados,
-            "fallidos": fallidos
-        }
-
-        print("\n========== RESULTADO JSON ==========")
-        print(
-            "RESULTADO_JSON="
-            + json.dumps(salida, ensure_ascii=False)
-        )
-        print("\nVALIDACION FINALIZADA.")
-
-        if fallidos:
-            raise Exception(
-                "Algunos SITE ID no pudieron consultarse."
+    for bloque in bloques:
+        cifrado = clave.encrypt(
+            bloque.encode("utf-8"),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA384()),
+                algorithm=hashes.SHA384(),
+                label=None
             )
+        )
+        cifrados.append(base64.b64encode(cifrado).decode("ascii"))
+
+    return "00000001".join(cifrados) + version
+
+
+def iniciar_sesion_automatica(session):
+    print("\n1. AUTENTICANDO EN iMASTER...")
+
+    if not USUARIO or not CONTRASENA:
+        raise Exception(
+            "Faltan las credenciales IMASTER_USER o IMASTER_PASSWORD."
+        )
+
+    clave, version, timestamp = obtener_clave(session)
+    password_cifrada = cifrar_contrasena(CONTRASENA, clave, version)
+
+    nonce = "".join(format(byte, "x") for byte in os.urandom(16))
+
+    parametros = {
+        "decision": "1",
