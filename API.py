@@ -4,10 +4,7 @@ import json
 import base64
 import requests
 
-from urllib.parse import quote
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.serialization import load_der_public_key
+from playwright.sync_api import sync_playwright
 
 
 # ============================================================
@@ -27,7 +24,7 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-USUARIO = os.getenv("IMASTER_USER", "MON_MOV")
+USUARIO = os.getenv("IMASTER_USER", "")
 CONTRASENA = os.getenv("IMASTER_PASSWORD", "")
 API_KEY = os.getenv("SHEETS_API_KEY", "")
 
@@ -45,150 +42,106 @@ ESTADOS = {
 }
 
 
-
-def obtener_clave(session):
-
-    url = f"{BASE_URL}/unisess/v1/auth/publickey"
-
-    respuesta = session.get(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json",
-        },
-        timeout=30
-    )
-
-    print("\n--- DIAGNÓSTICO DE CLAVE PÚBLICA ---")
-    print("Código HTTP:", respuesta.status_code)
-    print("Content-Type:", respuesta.headers.get("Content-Type"))
-    print("URL final:", respuesta.url)
-    print("Respuesta:", respuesta.text[:500])
-    print("-----------------------------------")
-
-    respuesta.raise_for_status()
-
-    try:
-        datos = respuesta.json()
-
-    except ValueError:
-
-        raise Exception(
-            "iMaster no devolvió JSON al solicitar la clave pública. "
-            "Revisar el diagnóstico anterior."
-        )
-
-    clave_publica = (
-        datos.get("data", {}).get("publicKey")
-        or datos.get("publicKey")
-    )
-
-    if not clave_publica:
-
-        raise Exception(
-            "No se encontró publicKey en la respuesta de iMaster."
-        )
-
-    return clave_publica
-
-
-
 # ============================================================
-# CIFRAR CONTRASEÑA
-# ============================================================
-
-def cifrar_contrasena(contrasena, clave_publica):
-
-    clave_bytes = base64.b64decode(clave_publica)
-
-    clave = load_der_public_key(clave_bytes)
-
-    contrasena_cifrada = clave.encrypt(
-        contrasena.encode("utf-8"),
-        padding.PKCS1v15()
-    )
-
-    return base64.b64encode(
-        contrasena_cifrada
-    ).decode("utf-8")
-
-
-# ============================================================
-# INICIAR SESIÓN EN IMASTER
+# INICIAR SESIÓN EN IMASTER MEDIANTE PLAYWRIGHT
 # ============================================================
 
 def iniciar_sesion(session):
 
-    print("Iniciando sesión en iMaster...")
+    print("Iniciando sesión en iMaster mediante Playwright...")
 
     if not USUARIO:
-        raise Exception(
-            "No está configurado IMASTER_USER."
-        )
+        raise Exception("No está configurado IMASTER_USER.")
 
     if not CONTRASENA:
-        raise Exception(
-            "No está configurado IMASTER_PASSWORD."
-        )
+        raise Exception("No está configurado IMASTER_PASSWORD.")
 
-    clave_publica = obtener_clave(session)
-
-    password_cifrado = cifrar_contrasena(
-        CONTRASENA,
-        clave_publica
+    login_url = (
+        "https://nce.nb.movistar.com.sv/"
+        "unisso/login.action?decision=1&service=%2Funisess%2Fauth%3Fservice%3D%252F"
     )
 
-    url = f"{BASE_URL}/unisess/v1/auth/validateUser.action"
+    playwright = None
+    browser = None
 
-    parametros = {
-        "userName": USUARIO,
-        "password": password_cifrado,
-    }
+    try:
 
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+        playwright = sync_playwright().start()
 
-    respuesta = session.post(
-        url,
-        json=parametros,
-        headers=headers,
-        timeout=30,
-        allow_redirects=False
-    )
-
-    if respuesta.status_code not in (200, 302):
-
-        raise Exception(
-            f"Error de autenticación iMaster: "
-            f"HTTP {respuesta.status_code} - {respuesta.text[:500]}"
+        browser = playwright.chromium.launch(
+            headless=True
         )
 
-    if respuesta.status_code == 302:
+        context = browser.new_context()
 
-        redirect_url = respuesta.headers.get("Location", "")
+        page = context.new_page()
 
-        if not redirect_url:
-            raise Exception(
-                "iMaster respondió con redirección sin URL."
-            )
+        page.set_default_timeout(60000)
 
-        if "login" in redirect_url.lower():
-            raise Exception(
-                "iMaster rechazó las credenciales."
-            )
+        print("Abriendo portal iMaster...")
 
-    if not session.cookies:
+        page.goto(login_url)
 
-        raise Exception(
-            "No se recibió ninguna cookie de sesión de iMaster."
+        print("Ingresando credenciales de la API...")
+
+        page.get_by_placeholder(
+            "Tenant/Username or username"
+        ).fill(USUARIO)
+
+        page.get_by_placeholder(
+            "Password"
+        ).fill(CONTRASENA)
+
+        print("Enviando formulario de autenticación...")
+
+        page.locator("#submitDataverify").click()
+
+        page.wait_for_load_state(
+            "networkidle",
+            timeout=60000
         )
 
-    print("Sesión iniciada correctamente.")
+        # Transferir las cookies del navegador a requests
 
-    return True
+        cookies = context.cookies()
+
+        if not cookies:
+            raise Exception(
+                "Playwright no recibió cookies de sesión."
+            )
+
+        for cookie in cookies:
+
+            session.cookies.set(
+                cookie["name"],
+                cookie["value"],
+                domain=cookie.get("domain"),
+                path=cookie.get("path", "/")
+            )
+
+        if not session.cookies.get_dict():
+            raise Exception(
+                "No se pudieron transferir las cookies a requests."
+            )
+
+        print("Cookies transferidas correctamente.")
+
+        print(
+            "Cantidad de cookies:",
+            len(session.cookies)
+        )
+
+        print("Autenticación mediante Playwright finalizada.")
+
+        return True
+
+    finally:
+
+        if browser:
+            browser.close()
+
+        if playwright:
+            playwright.stop()
 
 
 # ============================================================
