@@ -21,7 +21,7 @@ URL_GOOGLE_SHEETS = (
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Chrome/156.0.0.0 Safari/537.36"
 )
 
 USUARIO = os.getenv("IMASTER_USER", "")
@@ -206,32 +206,36 @@ def preparar_sesion_portal(session, ruta):
 # ============================================================
 
 
+
 def consultar_router(session, identificador, csrf_token):
 
     url = (
         f"{BASE_URL}/controller/campus/v2/devices/list"
-        "?sortField=status&pageIndex=1&pageSize=5&autorefresh=true"
+        "?sortField=status&pageIndex=1&pageSize=5"
     )
 
     headers = {
         "User-Agent": USER_AGENT,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "X-CSRF-TOKEN": csrf_token,
+        "Accept-Language": "en-us",
+        "Origin": BASE_URL,
+        "X-Requested-With": "XMLHttpRequest",
+        "http_x_requested_with": "XMLHttpRequest",
+        "roarand": csrf_token,
+        "x-uni-crsf-token": csrf_token
     }
 
     parametros = {
-        "pageIndex": 1,
-        "pageSize": 5,
         "keyWord": identificador,
         "status": [0, 1, 2, 3],
         "deviceGrpTypeList": ["AC", "AP", "AR", "FW", "LSW"],
         "deviceRoles": [],
         "managementMode": [0],
         "screenNo": "device",
-        "searchFields": ["name"],
         "tenantIdList": [],
-        "tenantType": "none"
+        "tenantType": "none",
+        "searchFields": ["name"]
     }
 
     print(f"Buscando SITE ID en iMaster: {identificador}")
@@ -244,16 +248,13 @@ def consultar_router(session, identificador, csrf_token):
     )
 
     if respuesta.status_code != 200:
-
         print("===== DIAGNÓSTICO DE CONSULTA =====")
         print("Código HTTP:", respuesta.status_code)
         print("Respuesta:", respuesta.text[:1500])
         print("===== FIN DEL DIAGNÓSTICO =====")
-
         respuesta.raise_for_status()
 
     datos = respuesta.json()
-
     registros = datos.get("data", [])
 
     if not isinstance(registros, list):
@@ -262,7 +263,6 @@ def consultar_router(session, identificador, csrf_token):
     router_encontrado = None
 
     for router in registros:
-
         nombre = (
             router.get("name")
             or router.get("deviceName")
@@ -274,7 +274,6 @@ def consultar_router(session, identificador, csrf_token):
             break
 
     if not router_encontrado:
-
         raise Exception(
             f"No se encontró el router {identificador} en iMaster. "
             f"Resultados recibidos: {datos.get('totalRecords', 0)}"
@@ -302,6 +301,7 @@ def consultar_router(session, identificador, csrf_token):
     )
 
     return id_router, device_ip
+
 
 # ============================================================
 # CONSULTAR INTERFACES Y VPN DEL ROUTER
