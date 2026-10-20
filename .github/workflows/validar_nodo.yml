@@ -37,4 +37,4 @@ jobs:
           IMASTER_USER: ${{ secrets.IMASTER_USER }}
           IMASTER_PASSWORD: ${{ secrets.IMASTER_PASSWORD }}
           SHEETS_API_KEY: ${{ secrets.SHEETS_API_KEY }}
-        run: python validar_nodo.py
+        run: python API.py
