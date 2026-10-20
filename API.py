@@ -205,11 +205,12 @@ def preparar_sesion_portal(session, ruta):
 # CONSULTAR ROUTER POR SITE ID
 # ============================================================
 
+
 def consultar_router(session, identificador, csrf_token):
 
     url = (
         f"{BASE_URL}/controller/campus/v2/devices/list"
-        "?pageIndex=1&pageSize=1&autorefresh=true"
+        "?sortField=status&pageIndex=1&pageSize=5&autorefresh=true"
     )
 
     headers = {
@@ -221,8 +222,19 @@ def consultar_router(session, identificador, csrf_token):
 
     parametros = {
         "pageIndex": 1,
-        "pageSize": 1
+        "pageSize": 5,
+        "keyWord": identificador,
+        "status": [0, 1, 2, 3],
+        "deviceGrpTypeList": ["AC", "AP", "AR", "FW", "LSW"],
+        "deviceRoles": [],
+        "managementMode": [0],
+        "screenNo": "device",
+        "searchFields": ["name"],
+        "tenantIdList": [],
+        "tenantType": "none"
     }
+
+    print(f"Buscando SITE ID en iMaster: {identificador}")
 
     respuesta = session.post(
         url,
@@ -244,6 +256,9 @@ def consultar_router(session, identificador, csrf_token):
 
     registros = datos.get("data", [])
 
+    if not isinstance(registros, list):
+        raise Exception("iMaster devolvió un formato de datos inesperado.")
+
     router_encontrado = None
 
     for router in registros:
@@ -255,14 +270,14 @@ def consultar_router(session, identificador, csrf_token):
         )
 
         if nombre.strip().upper() == identificador.strip().upper():
-
             router_encontrado = router
             break
 
     if not router_encontrado:
 
         raise Exception(
-            f"No se encontró el router {identificador} en iMaster."
+            f"No se encontró el router {identificador} en iMaster. "
+            f"Resultados recibidos: {datos.get('totalRecords', 0)}"
         )
 
     id_router = (
@@ -273,13 +288,11 @@ def consultar_router(session, identificador, csrf_token):
     device_ip = router_encontrado.get("deviceIp")
 
     if not id_router:
-
         raise Exception(
             f"No se encontró el ID interno del router {identificador}."
         )
 
     if not device_ip:
-
         raise Exception(
             f"No se encontró la IP del router {identificador}."
         )
@@ -289,6 +302,7 @@ def consultar_router(session, identificador, csrf_token):
     )
 
     return id_router, device_ip
+
 # ============================================================
 # CONSULTAR INTERFACES Y VPN DEL ROUTER
 # ============================================================
