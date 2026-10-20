@@ -15,7 +15,7 @@ BASE_URL = "https://nce.nb.movistar.com.sv"
 
 URL_GOOGLE_SHEETS = (
     "https://script.google.com/macros/s/"
-    "AKfycbyIY5PdHTHa7eUidjHWfvbYlCmu9oI2FSPveSuYuCTEQaExo3cheT57-FD52TDSXIku7g/exec"
+    "AKfycbxQzY4_0orjIist7t9kpWWJ9FjdYNy78xGLFQtgjhcAzxA7OT6jLkGuomN9n188sXIZ/exec"
 )
 
 USER_AGENT = (
