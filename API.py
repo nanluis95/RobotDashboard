@@ -209,7 +209,7 @@ def consultar_router(session, identificador, csrf_token):
 
     url = (
         f"{BASE_URL}/controller/campus/v2/devices/list"
-        "?sortField=status&pageIndex=1&pageSize=5"
+        "?pageIndex=1&pageSize=1&autorefresh=true"
     )
 
     headers = {
@@ -220,8 +220,8 @@ def consultar_router(session, identificador, csrf_token):
     }
 
     parametros = {
-        "keyWord": identificador,
-        "searchFields": ["name"],
+        "pageIndex": 1,
+        "pageSize": 1
     }
 
     respuesta = session.post(
@@ -235,21 +235,14 @@ def consultar_router(session, identificador, csrf_token):
 
         print("===== DIAGNÓSTICO DE CONSULTA =====")
         print("Código HTTP:", respuesta.status_code)
-        print("Content-Type:", respuesta.headers.get("Content-Type"))
-        print("Respuesta de iMaster:")
-        print(respuesta.text[:1500])
+        print("Respuesta:", respuesta.text[:1500])
         print("===== FIN DEL DIAGNÓSTICO =====")
 
         respuesta.raise_for_status()
 
     datos = respuesta.json()
 
-    registros = (
-        datos.get("data", {}).get("list")
-        or datos.get("data", {}).get("records")
-        or datos.get("list")
-        or []
-    )
+    registros = datos.get("data", [])
 
     router_encontrado = None
 
