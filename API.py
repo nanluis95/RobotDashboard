@@ -231,7 +231,7 @@ def consultar_router(session, identificador, csrf_token):
         timeout=30
     )
 
-        if respuesta.status_code != 200:
+    if respuesta.status_code != 200:
 
         print("===== DIAGNÓSTICO DE CONSULTA =====")
         print("Código HTTP:", respuesta.status_code)
@@ -296,8 +296,6 @@ def consultar_router(session, identificador, csrf_token):
     )
 
     return id_router, device_ip
-
-
 # ============================================================
 # CONSULTAR INTERFACES Y VPN DEL ROUTER
 # ============================================================
