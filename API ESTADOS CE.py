@@ -381,13 +381,13 @@ def consultar_interfaces(session, id_router, csrf_token):
         except (TypeError, ValueError):
             estado = None
 
-       interfaces[nombre_destino] = ESTADOS.get(
+               interfaces[nombre_destino] = ESTADOS.get(
             estado,
-             "DESCONOCIDO"
-       )
+            "DESCONOCIDO"
+        )
 
         if not fecha_up:
-           fecha_up = puerto.get("lastPhyUpTime", "")
+            fecha_up = puerto.get("lastPhyUpTime", "")
 
     # Obtener VPN únicamente si viene dentro de un diccionario
     vpn = ""
