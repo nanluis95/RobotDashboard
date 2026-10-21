@@ -385,8 +385,8 @@ def consultar_interfaces(session, id_router, csrf_token):
             estado,
             "DESCONOCIDO"
         )
-        if not fecha_up:
-    fecha_up = puerto.get("lastPhyUpTime", "")
+    if not fecha_up:
+        fecha_up = puerto.get("lastPhyUpTime", "")
 
     # Obtener VPN únicamente si viene dentro de un diccionario
     vpn = ""
