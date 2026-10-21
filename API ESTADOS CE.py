@@ -588,18 +588,14 @@ def obtener_site_ids():
     return resultado
 
 
+
 # ============================================================
 # PROCESAR UN SITE ID
 # ============================================================
 
-
 def procesar_site(session, csrf_token, identificador):
 
     print(f"\nProcesando SITE ID: {identificador}")
-
-    device_ip = ""
-    interfaces = {}
-    vpn = ""
 
     # 1. Buscar router en iMaster
     try:
@@ -611,34 +607,29 @@ def procesar_site(session, csrf_token, identificador):
 
     except Exception as error:
 
-    print(
-        f"Error consultando interfaces de {identificador}: {error}"
-    )
+        print(
+            f"Error buscando router {identificador}: {error}"
+        )
 
-    print(
-        f"SITE ID PENDIENTE: {identificador}. "
-        "Se volverá a consultar en una próxima ejecución."
-    )
+        print(
+            f"SITE ID PENDIENTE: {identificador}. "
+            "Se volverá a consultar en una próxima ejecución."
+        )
 
-    return False
+        return False
 
-        except Exception as error_sheets:
-            print(
-                f"ERROR enviando resultado OFFLINE de {identificador}: "
-                f"{error_sheets}"
-            )
-            return False
-
-    # 2. Consultar interfaces y VPN
+    # 2. Consultar interfaces y fecha de conexión
     try:
         interfaces, vpn, fecha_up = consultar_interfaces(
-           session,
-           id_router,
-           csrf_token
+            session,
+            id_router,
+            csrf_token
         )
 
         if not interfaces:
-            raise Exception("No se encontraron interfaces objetivo.")
+            raise Exception(
+                "No se encontraron interfaces objetivo."
+            )
 
     except Exception as error:
 
@@ -646,45 +637,34 @@ def procesar_site(session, csrf_token, identificador):
             f"Error consultando interfaces de {identificador}: {error}"
         )
 
-        observacion = f"Error al consultar interfaces: {error}"
+        print(
+            f"SITE ID PENDIENTE: {identificador}. "
+            "Se volverá a consultar en una próxima ejecución."
+        )
 
-        try:
-            enviar_a_google_sheets(
-                identificador,
-                "",
-                {},
-                "",
-                API_KEY,
-                "OFFLINE",
-                observacion
-            )
-            return True
+        return False
 
-        except Exception as error_sheets:
-            print(
-                f"ERROR enviando resultado OFFLINE de {identificador}: "
-                f"{error_sheets}"
-            )
-            return False
-
-    # 3. Si se obtuvieron interfaces, registrar ONLINE
+    # 3. Enviar resultado ONLINE a REPORTE_CE_ONLINE
     try:
         enviar_a_reporte_ce(
-           identificador,
-           device_ip,
-           interfaces,
-           fecha_up,
-           "ONLINE",
-           API_KEY_REPORTE_CE
+            identificador,
+            device_ip,
+            interfaces,
+            fecha_up,
+            "ONLINE",
+            API_KEY_REPORTE_CE
         )
 
         print(f"RESULTADO ONLINE: {identificador}")
+
         return True
 
     except Exception as error:
+
         print(
             f"ERROR enviando resultado ONLINE de {identificador}: {error}"
         )
+
         return False
 
 
