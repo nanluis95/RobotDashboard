@@ -26,7 +26,9 @@ USER_AGENT = (
 
 USUARIO = os.getenv("IMASTER_USER", "")
 CONTRASENA = os.getenv("IMASTER_PASSWORD", "")
+
 API_KEY = os.getenv("SHEETS_API_KEY", "")
+API_KEY_REPORTE_CE = os.getenv("REPORTE_CE_API_KEY", "")
 
 INTERFACES_OBJETIVO = {
     "GigabitEthernet0/0/4": "GigabitEthernet0_0_4",
@@ -353,6 +355,7 @@ def consultar_interfaces(session, id_router, csrf_token):
         registros = []
 
     interfaces = {}
+    fecha_up = ""
 
     for puerto in registros:
 
@@ -382,6 +385,8 @@ def consultar_interfaces(session, id_router, csrf_token):
             estado,
             "DESCONOCIDO"
         )
+        if not fecha_up:
+    fecha_up = puerto.get("lastPhyUpTime", "")
 
     # Obtener VPN únicamente si viene dentro de un diccionario
     vpn = ""
@@ -408,7 +413,7 @@ def consultar_interfaces(session, id_router, csrf_token):
     print(f"Interfaces consultadas: {len(interfaces)}")
     print(f"VPN obtenida: {vpn or 'No disponible'}")
 
-    return interfaces, vpn
+    return interfaces, vpn, fecha_up
 
 
 
@@ -468,6 +473,63 @@ def enviar_a_google_sheets(
     print(
         f"Información enviada correctamente para {identificador}: "
         f"{estado} - {observacion}"
+    )
+
+    return True
+
+def enviar_a_reporte_ce(
+    identificador,
+    device_ip,
+    interfaces,
+    fecha_up,
+    estado,
+    api_key
+):
+    if not api_key:
+        raise Exception(
+            "No está configurada REPORTE_CE_API_KEY."
+        )
+
+    parametros = {
+        "apiKey": api_key,
+        "siteId": identificador,
+        "estado": estado,
+        "interfazGe4": interfaces.get("GigabitEthernet0_0_4", ""),
+        "interfazGe8": interfaces.get("GigabitEthernet0_0_8", ""),
+        "interfazXge8": interfaces.get("XGigabitEthernet0_0_8", ""),
+        "interfazXge9": interfaces.get("XGigabitEthernet0_0_9", ""),
+        "ip": device_ip,
+        "fechaUp": fecha_up or ""
+    }
+
+    respuesta = requests.post(
+        URL_GOOGLE_SHEETS,
+        json=parametros,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+        timeout=45
+    )
+
+    respuesta.raise_for_status()
+
+    try:
+        resultado = respuesta.json()
+    except ValueError:
+        raise Exception(
+            "La API REPORTE CE no devolvió JSON válido: "
+            + respuesta.text[:500]
+        )
+
+    if not resultado.get("ok"):
+        raise Exception(
+            "La API REPORTE CE rechazó la actualización: "
+            + str(resultado)
+        )
+
+    print(
+        f"Resultado enviado correctamente para {identificador}: {estado}"
     )
 
     return True
@@ -549,26 +611,16 @@ def procesar_site(session, csrf_token, identificador):
 
     except Exception as error:
 
-        observacion = str(error)
+    print(
+        f"Error consultando interfaces de {identificador}: {error}"
+    )
 
-        if "No se encontró el router" in observacion:
-            observacion = "No registrado en iMaster"
-        else:
-            observacion = f"Error al buscar router: {observacion}"
+    print(
+        f"SITE ID PENDIENTE: {identificador}. "
+        "Se volverá a consultar en una próxima ejecución."
+    )
 
-        print(f"SITE ID OFFLINE: {identificador} - {observacion}")
-
-        try:
-            enviar_a_google_sheets(
-                identificador,
-                "",
-                {},
-                "",
-                API_KEY,
-                "OFFLINE",
-                observacion
-            )
-            return True
+    return False
 
         except Exception as error_sheets:
             print(
@@ -579,10 +631,10 @@ def procesar_site(session, csrf_token, identificador):
 
     # 2. Consultar interfaces y VPN
     try:
-        interfaces, vpn = consultar_interfaces(
-            session,
-            id_router,
-            csrf_token
+        interfaces, vpn, fecha_up = consultar_interfaces(
+           session,
+           id_router,
+           csrf_token
         )
 
         if not interfaces:
@@ -617,14 +669,13 @@ def procesar_site(session, csrf_token, identificador):
 
     # 3. Si se obtuvieron interfaces, registrar ONLINE
     try:
-        enviar_a_google_sheets(
-            identificador,
-            device_ip,
-            interfaces,
-            vpn,
-            API_KEY,
-            "ONLINE",
-            "Validación exitosa"
+        enviar_a_reporte_ce(
+           identificador,
+           device_ip,
+           interfaces,
+           fecha_up,
+           "ONLINE",
+           API_KEY_REPORTE_CE
         )
 
         print(f"RESULTADO ONLINE: {identificador}")
@@ -645,13 +696,12 @@ def procesar_site(session, csrf_token, identificador):
 def main():
 
     print("=" * 60)
-    print("INICIO DE VALIDACIÓN DE ROUTERS")
+    print("INICIO DE VALIDACIÓN DE ESTADOS CE")
     print("=" * 60)
 
-    if not API_KEY:
-
+    if not API_KEY_REPORTE_CE:
         raise Exception(
-            "No está configurada SHEETS_API_KEY."
+            "No está configurada REPORTE_CE_API_KEY."
         )
 
     site_ids = obtener_site_ids()
@@ -694,17 +744,14 @@ def main():
             )
 
             if resultado:
-
                 exitosos += 1
-
             else:
-
                 fallidos += 1
 
         # 4. Resumen final
 
         print("\n" + "=" * 60)
-        print("RESUMEN DE VALIDACIÓN")
+        print("RESUMEN DE VALIDACIÓN ESTADOS CE")
         print("=" * 60)
 
         print(f"Total procesados: {len(site_ids)}")
@@ -713,19 +760,14 @@ def main():
 
         print("=" * 60)
 
-        # Si al menos un SITE ID falla,
-        # GitHub Actions marcará la ejecución como fallida.
-
         if fallidos > 0:
-
             raise Exception(
-                f"Validación finalizada con {fallidos} SITE ID fallidos."
+                f"Proceso finalizado con {fallidos} SITE ID fallidos."
             )
 
         print("PROCESO FINALIZADO CORRECTAMENTE.")
 
     finally:
-
         session.close()
 
 
@@ -734,5 +776,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
