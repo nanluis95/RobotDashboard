@@ -22,7 +22,7 @@ def procesar_excel(ruta_archivo):
     interfaces = [
         "GigabitEthernet0/0/4",
         "GigabitEthernet0/0/8",
-        "GigabitEthernet0/0/10",
+        "GE0/0/10",
         "XGigabitEthernet0/0/8",
         "XGigabitEthernet0/0/9"
     ]
